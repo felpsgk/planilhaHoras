@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:dropdown_search/dropdown_search.dart';
 import 'package:http/http.dart' as http;
 import '../models/user_session.dart';
 
@@ -16,6 +17,7 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
   final _demandanteController = TextEditingController();
   final _descricaoController = TextEditingController();
   final _duracaoController = TextEditingController();
+  bool sucedeAlmoco = false;
 
   List<dynamic> _categorias = [];
   List<dynamic> _squads = [];
@@ -59,9 +61,11 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
       'ritm': _ritmController.text,
       'demandante': _demandanteController.text,
       'descricao': _descricaoController.text,
+      'apos_almoco': sucedeAlmoco ? '1' : '0',
       'duracao_minutos': _duracaoController.text,
       if (forcar) 'confirmar_limite': '1',
     });
+    print('Resposta da API: "${response.body}"');
 
     final data = jsonDecode(response.body);
 
@@ -69,10 +73,13 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Tarefa salva com sucesso')),
       );
-      _formKey.currentState!.reset();
+      // Resetar apenas os campos de texto (manualmente)
+      _ritmController.clear();
+      _demandanteController.clear();
+      _descricaoController.clear();
+      _duracaoController.clear();
       setState(() {
-        _categoriaSelecionada = null;
-        _squadSelecionado = null;
+        sucedeAlmoco = false; // Desmarca o checkbox!
       });
     } else if (data['overflow'] == true) {
       final confirm = await showDialog<bool>(
@@ -113,39 +120,62 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
           key: _formKey,
           child: ListView(
             children: [
-              DropdownButtonFormField<String>(
-                value: _categoriaSelecionada,
-                items: _categorias.map<DropdownMenuItem<String>>((categoria) {
-                  return DropdownMenuItem<String>(
-                    value: categoria['id'].toString(),
-                    child: Text(categoria['nome']),
-                  );
-                }).toList(),
+              DropdownSearch<String>(
+                items: _categorias
+                    .map((c) => '${c['id']} - ${c['nome']}')
+                    .toList(),
+                selectedItem: _categoriaSelecionada != null
+                    ? _categorias
+                            .firstWhere((c) =>
+                                c['id'].toString() ==
+                                _categoriaSelecionada)['id']
+                            .toString() +
+                        ' - ' +
+                        _categorias.firstWhere((c) =>
+                            c['id'].toString() == _categoriaSelecionada)['nome']
+                    : null,
+                dropdownDecoratorProps: const DropDownDecoratorProps(
+                  dropdownSearchDecoration: InputDecoration(
+                    labelText: 'Categoria',
+                  ),
+                ),
                 onChanged: (value) {
                   setState(() {
-                    _categoriaSelecionada = value;
+                    _categoriaSelecionada = value?.split(' - ').first;
                   });
                 },
-                decoration: const InputDecoration(labelText: 'Categoria'),
-                validator: (value) =>
-                    value == null ? 'Selecione uma categoria' : null,
+                validator: (value) => value == null || value.isEmpty
+                    ? 'Selecione uma categoria'
+                    : null,
+                popupProps: const PopupProps.menu(
+                  showSearchBox: true,
+                ),
               ),
-              DropdownButtonFormField<String>(
-                value: _squadSelecionado,
-                items: _squads.map<DropdownMenuItem<String>>((squad) {
-                  return DropdownMenuItem<String>(
-                    value: squad['id'].toString(),
-                    child: Text(squad['nome']),
-                  );
-                }).toList(),
+              DropdownSearch<String>(
+                items: _squads.map((s) => '${s['id']} - ${s['nome']}').toList(),
+                selectedItem: _squadSelecionado != null
+                    ? (() {
+                        final s = _squads
+                            .firstWhere((s) => s['id'] == _squadSelecionado);
+                        return '${s['id']} - ${s['nome']}';
+                      })()
+                    : null,
+                dropdownDecoratorProps: const DropDownDecoratorProps(
+                  dropdownSearchDecoration: InputDecoration(
+                    labelText: 'Squad',
+                  ),
+                ),
                 onChanged: (value) {
                   setState(() {
-                    _squadSelecionado = value;
+                    _squadSelecionado = value?.split(' - ').first;
                   });
                 },
-                decoration: const InputDecoration(labelText: 'Squad'),
-                validator: (value) =>
-                    value == null ? 'Selecione um time' : null,
+                validator: (value) => value == null || value.isEmpty
+                    ? 'Selecione um squad'
+                    : null,
+                popupProps: const PopupProps.menu(
+                  showSearchBox: true,
+                ),
               ),
               TextFormField(
                 controller: _ritmController,
@@ -163,6 +193,15 @@ class _TaskFormScreenState extends State<TaskFormScreen> {
                 controller: _duracaoController,
                 decoration: const InputDecoration(labelText: 'Duração (min)'),
                 keyboardType: TextInputType.number,
+              ),
+              CheckboxListTile(
+                title: const Text("Sucede horário de almoço"),
+                value: sucedeAlmoco,
+                onChanged: (value) {
+                  setState(() {
+                    sucedeAlmoco = value!;
+                  });
+                },
               ),
               const SizedBox(height: 24),
               ElevatedButton(

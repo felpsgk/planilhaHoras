@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:intl/intl.dart';
 import 'package:flutter/material.dart';
+import 'package:dropdown_search/dropdown_search.dart';
 import 'package:http/http.dart' as http;
 import '../models/user_session.dart';
 
@@ -14,8 +15,11 @@ class TaskListScreen extends StatefulWidget {
 class _TaskListScreenState extends State<TaskListScreen> {
   List<dynamic> tarefas = [];
   DateTime _dataSelecionada = DateTime.now();
-  List<dynamic> squads = [];
-  List<dynamic> categorias = [];
+
+  List<dynamic> _categorias = [];
+  List<dynamic> _squads = [];
+  String? _categoriaSelecionada;
+  String? _squadSelecionado;
 
   String _formatarHora(String hora) {
     try {
@@ -46,6 +50,26 @@ class _TaskListScreenState extends State<TaskListScreen> {
     }
   }
 
+  Future<void> _carregarCategoriasESquads() async {
+    final categoriasUrl = Uri.parse(
+        'https://felpsti.com.br/backend_planilhaHoras/get_categorias.php');
+    final squadsUrl = Uri.parse(
+        'https://felpsti.com.br/backend_planilhaHoras/get_squads.php');
+
+    final categoriasResp = await http.get(categoriasUrl);
+    final squadsResp = await http.get(squadsUrl);
+
+    if (categoriasResp.statusCode == 200 && squadsResp.statusCode == 200) {
+      setState(() {
+        _categorias = jsonDecode(categoriasResp.body);
+        _squads = jsonDecode(squadsResp.body);
+      });
+    } else {
+      // erro
+      print('Erro ao buscar dados');
+    }
+  }
+
   Future<void> _selecionarData() async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -60,31 +84,10 @@ class _TaskListScreenState extends State<TaskListScreen> {
     }
   }
 
-  Future<void> _carregarDropdowns() async {
-    final squadResponse = await http.get(
-      Uri.parse('https://felpsti.com.br/backend_planilhaHoras/get_squads.php'),
-    );
-    final categoriaResponse = await http.get(
-      Uri.parse(
-          'https://felpsti.com.br/backend_planilhaHoras/get_categorias.php'),
-    );
-
-    if (squadResponse.statusCode == 200 &&
-        categoriaResponse.statusCode == 200) {
-      // Como a resposta já é uma lista direta, só decodifica como List
-      squads = List<Map<String, dynamic>>.from(jsonDecode(squadResponse.body));
-      categorias =
-          List<Map<String, dynamic>>.from(jsonDecode(categoriaResponse.body));
-    } else {
-      // Trate erros aqui se necessário
-      print('Erro ao carregar squads ou categorias');
-    }
-  }
-
   void _editarTarefa(Map tarefa) async {
-    await _carregarDropdowns(); // <- Aguarda os dados antes de mostrar o modal
+    await _carregarCategoriasESquads();
 
-    final _formKey = GlobalKey<FormState>();
+    final formKey = GlobalKey<FormState>();
 
     String? squadSelecionado = tarefa['squad'];
     String? categoriaSelecionada = tarefa['categoria'];
@@ -101,7 +104,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
       text: DateFormat('dd/MM/yyyy').format(dataSelecionada),
     );
 
-    Future<void> _selecionarDataTarefa() async {
+    Future<void> selecionarDataTarefa() async {
       final picked = await showDatePicker(
         context: context,
         initialDate: dataSelecionada,
@@ -121,7 +124,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Editar Tarefa'),
         content: Form(
-          key: _formKey,
+          key: formKey,
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -129,30 +132,69 @@ class _TaskListScreenState extends State<TaskListScreen> {
                 TextFormField(
                   controller: dataController,
                   readOnly: true,
-                  onTap: _selecionarDataTarefa,
+                  onTap: selecionarDataTarefa,
                   decoration: const InputDecoration(labelText: 'Data'),
                 ),
-                DropdownButtonFormField<String>(
-                  value: squadSelecionado,
-                  onChanged: (value) => squadSelecionado = value,
-                  decoration: const InputDecoration(labelText: 'Squad'),
-                  items: squads.map<DropdownMenuItem<String>>((item) {
-                    return DropdownMenuItem(
-                      value: item['nome'],
-                      child: Text(item['nome']),
-                    );
-                  }).toList(),
+                DropdownSearch<String>(
+                  items: _categorias
+                      .map((c) => '${c['id']} - ${c['nome']}')
+                      .toList(),
+                  selectedItem: _categoriaSelecionada != null
+                      ? _categorias
+                              .firstWhere((c) =>
+                                  c['id'].toString() ==
+                                  _categoriaSelecionada)['id']
+                              .toString() +
+                          ' - ' +
+                          _categorias.firstWhere((c) =>
+                              c['id'].toString() ==
+                              _categoriaSelecionada)['nome']
+                      : null,
+                  dropdownDecoratorProps: const DropDownDecoratorProps(
+                    dropdownSearchDecoration: InputDecoration(
+                      labelText: 'Categoria',
+                    ),
+                  ),
+                  onChanged: (value) {
+                    setState(() {
+                      _categoriaSelecionada = value?.split(' - ').first;
+                    });
+                  },
+                  validator: (value) => value == null || value.isEmpty
+                      ? 'Selecione uma categoria'
+                      : null,
+                  popupProps: const PopupProps.menu(
+                    showSearchBox: true,
+                  ),
                 ),
-                DropdownButtonFormField<String>(
-                  value: categoriaSelecionada,
-                  onChanged: (value) => categoriaSelecionada = value,
-                  decoration: const InputDecoration(labelText: 'Categoria'),
-                  items: categorias.map<DropdownMenuItem<String>>((item) {
-                    return DropdownMenuItem(
-                      value: item['nome'],
-                      child: Text(item['nome']),
-                    );
-                  }).toList(),
+                DropdownSearch<String>(
+                  items:
+                      _squads.map((s) => '${s['id']} - ${s['nome']}').toList(),
+                  selectedItem: _squadSelecionado != null
+                      ? _squads
+                              .firstWhere((s) =>
+                                  s['id'].toString() == _squadSelecionado)['id']
+                              .toString() +
+                          ' - ' +
+                          _squads.firstWhere((s) =>
+                              s['id'].toString() == _squadSelecionado)['nome']
+                      : null,
+                  dropdownDecoratorProps: const DropDownDecoratorProps(
+                    dropdownSearchDecoration: InputDecoration(
+                      labelText: 'Squad',
+                    ),
+                  ),
+                  onChanged: (value) {
+                    setState(() {
+                      _squadSelecionado = value?.split(' - ').first;
+                    });
+                  },
+                  validator: (value) => value == null || value.isEmpty
+                      ? 'Selecione um squad'
+                      : null,
+                  popupProps: const PopupProps.menu(
+                    showSearchBox: true,
+                  ),
                 ),
                 TextFormField(
                   controller: ritm,
@@ -196,7 +238,7 @@ class _TaskListScreenState extends State<TaskListScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              if (_formKey.currentState!.validate()) {
+              if (formKey.currentState!.validate()) {
                 final updateUrl = Uri.parse(
                   'https://felpsti.com.br/backend_planilhaHoras/editar_tarefa.php',
                 );
