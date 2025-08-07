@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../screens/home_screen.dart';
 import '../models/user_session.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -17,7 +18,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _senhaController = TextEditingController();
   bool _isLoading = false;
 
-  Future<void> login() async {
+    Future<void> login() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
@@ -25,7 +26,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final response = await http.post(
       Uri.parse('https://felpsti.com.br/backend_planilhaHoras/login.php'),
       body: {
-        'email': _loginController.text.trim(), // continua como 'email' na API
+        'email': _loginController.text.trim(),
         'senha': _senhaController.text,
       },
     );
@@ -33,9 +34,16 @@ class _LoginScreenState extends State<LoginScreen> {
     final data = json.decode(response.body);
 
     if (response.statusCode == 200 && data['success']) {
+      // Popula a sessão em memória (bom para uso imediato)
       UserSession.token = data['token'];
       UserSession.userId = data['user_id'];
       UserSession.email = data['email'];
+
+      // ✅ NOVO: Salva os dados permanentemente
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('token', data['token']);
+      await prefs.setInt('user_id', data['user_id']);
+      await prefs.setString('email', data['email']);
 
       if (!mounted) return;
       Navigator.pushReplacement(

@@ -15,10 +15,9 @@ class ExportarTarefasScreen extends StatefulWidget {
 class _ExportarTarefasScreenState extends State<ExportarTarefasScreen> {
   List<String> linhasFormatadas = [];
   bool carregando = false;
-  bool modoPowerBI = false;
+  bool modoPowerBI = true;
 
-  DateTime _dataDeSelecionada =
-      DateTime.now().subtract(const Duration(days: 7));
+  DateTime _dataDeSelecionada = DateTime(DateTime.now().year, DateTime.now().month, 1);
   DateTime _dataAteSelecionada = DateTime.now();
 
   Future<void> _carregarTarefasFormatadas() async {
@@ -34,8 +33,6 @@ class _ExportarTarefasScreenState extends State<ExportarTarefasScreen> {
       'data_ate': _dataAteSelecionada.toIso8601String().substring(0, 10),
       'modo_powerbi': modoPowerBI ? '1' : '0',
     });
-    print(response.body);
-    print('modoPowerBI: $modoPowerBI');
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       final tarefas = data['tarefas'] as List<dynamic>;
